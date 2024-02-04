@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
-    "target": "es6", // Set the JavaScript version for output
-    "module": "commonjs", // Use commonjs module resolution
+    "module": "ESNext",
+    "target": "ESNext",
     "outDir": "./dist", // Redirect output structure to ./dist folder
     "rootDir": "./src", // Specify the root directory of input files
     "strict": true, // Enable all strict type-checking options

@@ -38,8 +38,8 @@ fastify.get(
 // Start the server
 const start = async () => {
   try {
-    await fastify.listen({ port: 3001 });
-    console.log(`Server listening on port 3001`);
+    await fastify.listen({ port: 3005 });
+    console.log(`Server listening on port 3005`);
   } catch (err) {
     fastify.log.error(err);
     process.exit(1);

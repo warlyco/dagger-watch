@@ -1,7 +1,8 @@
 {
   "compilerOptions": {
-    "module": "ESNext",
+    "module": "NodeNext",
     "target": "ESNext",
+    "moduleResolution": "nodenext",
     "outDir": "./dist", // Redirect output structure to ./dist folder
     "rootDir": "./src", // Specify the root directory of input files
     "strict": true, // Enable all strict type-checking options

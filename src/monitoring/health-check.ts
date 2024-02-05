@@ -3,47 +3,79 @@ import { join } from "path";
 import { exec } from "child_process";
 import { promisify } from "util";
 
+interface ServerStatus {
+  isActive: boolean;
+  isFinalizing: boolean;
+  statusCheckHasError: boolean;
+}
+
 const execAsync = promisify(exec);
 
-// Construct the path to config.log using the home directory
 const logFilePath = join(homedir(), "config.log");
 
-// Example function to check if the "finalized" string appears in the last 100 lines of the log
-async function checkLogsForFinalization() {
+// Refactored to be promise-based and always return serverStatus
+async function checkLogsForFinalization(): Promise<ServerStatus> {
+  let serverStatus = {
+    isActive: false, // This will be updated by checkServiceStatus
+    isFinalizing: false,
+    statusCheckHasError: false,
+  };
+
   try {
     const { stdout, stderr } = await execAsync(
-      `tail -n 100 ${logFilePath} | grep "finalized"`
+      `tail -n 5 ${logFilePath} | grep "finalized"`
     );
     if (stderr) {
       console.error(`Error checking logs: ${stderr}`);
-      return;
-    }
-    if (stdout) {
+      serverStatus.statusCheckHasError = true;
+      serverStatus.isFinalizing = false;
+    } else if (stdout) {
       console.log("Logs show finalization. Node appears healthy.");
+      serverStatus.isFinalizing = true;
     } else {
       console.log("No recent finalization in logs. Node may not be healthy.");
+      serverStatus.isFinalizing = false;
     }
   } catch (error) {
-    // This catch block is specifically for catching errors from execAsync, which will
-    // include cases where grep finds no matches (leading to a non-zero exit code).
     console.log("No recent finalization in logs. Node may not be healthy.");
+    serverStatus.statusCheckHasError = true;
+    serverStatus.isFinalizing = false;
   }
+
+  return serverStatus;
 }
 
-// Check service status
-function checkServiceStatus(): void {
-  exec("sudo systemctl is-active wield.service", (error, stdout, stderr) => {
-    if (error || stderr) {
-      console.error(`Error checking service status: ${error || stderr}`);
-      return;
-    }
-    if (stdout.trim() === "active") {
-      console.log("Service is active. Checking logs...");
-      checkLogsForFinalization();
+// Refactored to update isActive directly and wait for log finalization check
+async function checkServiceStatus(): Promise<ServerStatus> {
+  let serverStatus = await checkLogsForFinalization(); // Get initial status from log check
+
+  try {
+    const { stdout, stderr } = await execAsync(
+      "sudo systemctl is-active wield.service"
+    );
+    if (stderr) {
+      console.error(`Error checking service status: ${stderr}`);
+      serverStatus.statusCheckHasError = true;
+      serverStatus.isActive = false;
+    } else if (stdout.trim() === "active") {
+      console.log("Service is active.");
+      serverStatus.isActive = true;
     } else {
       console.error("Service is not active.");
+      serverStatus.isActive = false;
     }
-  });
+  } catch (error) {
+    console.error(`Error checking service status: ${error}`);
+    serverStatus.statusCheckHasError = true;
+    serverStatus.isActive = false;
+  }
+
+  return serverStatus;
 }
 
-checkServiceStatus();
+const checkHealth = async (): Promise<ServerStatus> => {
+  const serverStatus = await checkServiceStatus();
+  return serverStatus;
+};
+
+export default checkHealth;

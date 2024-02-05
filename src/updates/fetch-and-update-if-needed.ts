@@ -42,21 +42,23 @@ async function extractBinaryUrlFromScript(
 }
 
 async function downloadBinary(url: string, outputPath: string): Promise<void> {
-  console.log(`Downloading new binary from ${url}...`);
   const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Failed to download binary: ${response.statusText}`);
-  }
+  if (!response.ok)
+    throw new Error(`Failed to download file: ${response.statusText}`);
+  if (!response.body) throw new Error("Response body is empty");
+
   const fileStream = createWriteStream(outputPath);
-  if (!response.body)
-    throw new Error("Failed to download binary: response body is empty.");
   response.body.pipe(fileStream);
+
   return new Promise((resolve, reject) => {
     fileStream.on("finish", () => {
-      console.log("Binary downloaded.");
+      console.log("Binary downloaded successfully.");
       resolve();
     });
-    fileStream.on("error", reject);
+    fileStream.on("error", (error) => {
+      console.error("Failed to download binary:", error);
+      reject(error);
+    });
   });
 }
 

@@ -45,7 +45,7 @@ fastify.get(
         isNewUpdateAvailable: updateStatus.isNewUpdateAvailable,
         message: updateStatus.isNewUpdateAvailable
           ? "An update is available."
-          : "Your system is up to date.",
+          : "Your node appears to be up to date.",
       });
     } catch (error) {
       return reply.code(500).send({

@@ -1,96 +1,71 @@
 import fetch from "node-fetch";
 import {
+  promises as fs,
+  createReadStream,
   createWriteStream,
   existsSync,
-  unlinkSync,
-  renameSync,
-  readFileSync,
-  writeFileSync,
 } from "fs";
-import { exec } from "child_process";
-import { promisify } from "util";
+import { createHash } from "crypto";
 import { tmpdir } from "os";
 import { join } from "path";
-
-const execAsync = promisify(exec);
 
 const scriptUrl =
   "https://shdw-drive.genesysgo.net/4xdLyZZJzL883AbiZvgyWKf2q55gcZiMgMkDNQMnyFJC/wield-installer.sh";
 const localBinaryPath = "/home/dagger/wield";
-const tempDownloadPath = join(tmpdir(), "wield-latest-temp");
 const tempScriptPath = join(tmpdir(), "wield-installer.sh");
 
-async function fetchAndUpdateScript(): Promise<string> {
-  console.log("Fetching update script...");
+async function fetchScriptAndExtractBinaryUrl(): Promise<string> {
   const response = await fetch(scriptUrl);
-  if (!response.ok) {
-    throw new Error(`Failed to download update script: ${response.statusText}`);
-  }
+  if (!response.ok)
+    throw new Error(`Failed to download script: ${response.statusText}`);
   const scriptContent = await response.text();
-  writeFileSync(tempScriptPath, scriptContent);
-  console.log("Update script fetched.");
-  return scriptContent;
-}
+  await fs.writeFile(tempScriptPath, scriptContent);
 
-async function extractBinaryUrlFromScript(
-  scriptContent: string
-): Promise<string> {
   const match = scriptContent.match(/WIELD_URL="([^"]+)"/);
-  if (!match)
-    throw new Error("Failed to extract binary URL from update script.");
+  if (!match) throw new Error("Failed to extract binary URL from script.");
   return match[1];
 }
 
-async function downloadBinary(url: string, outputPath: string): Promise<void> {
-  const response = await fetch(url);
-  if (!response.ok)
-    throw new Error(`Failed to download file: ${response.statusText}`);
-  if (!response.body) throw new Error("Response body is empty");
-
-  const fileStream = createWriteStream(outputPath);
-  response.body.pipe(fileStream);
-
+async function hashFile(filePath: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    fileStream.on("finish", () => {
-      console.log("Binary downloaded successfully.");
-      resolve();
-    });
-    fileStream.on("error", (error) => {
-      console.error("Failed to download binary:", error);
-      reject(error);
-    });
+    const hash = createHash("sha256");
+    const stream = createReadStream(filePath);
+    stream.on("data", (chunk) => hash.update(chunk));
+    stream.on("end", () => resolve(hash.digest("hex")));
+    stream.on("error", (error) => reject(error));
   });
 }
 
-async function replaceBinaryAndRestartService(): Promise<void> {
-  console.log("Updating and restarting service...");
-  await execAsync("sudo systemctl stop wield.service");
-  if (existsSync(localBinaryPath)) {
-    unlinkSync(localBinaryPath);
-  }
-  renameSync(tempDownloadPath, localBinaryPath);
-  await execAsync("sudo systemctl start wield.service");
-  console.log("Wield service has been updated and restarted.");
-}
-
-async function updateWieldBinary(): Promise<void> {
-  console.log("Starting update process...");
+async function checkForUpdate(): Promise<void> {
   try {
-    const scriptContent = await fetchAndUpdateScript();
-    const binaryUrl = await extractBinaryUrlFromScript(scriptContent);
-    await downloadBinary(binaryUrl, tempDownloadPath);
-    await replaceBinaryAndRestartService();
+    const binaryUrl = await fetchScriptAndExtractBinaryUrl();
+    const currentHash = existsSync(localBinaryPath)
+      ? await hashFile(localBinaryPath)
+      : "";
+
+    // Download the latest binary to a temporary location for hashing
+    const tempBinaryPath = join(tmpdir(), "wield-latest-temp");
+    const res = await fetch(binaryUrl);
+    if (!res.ok)
+      throw new Error(`Failed to download binary: ${res.statusText}`);
+    const tempFileStream = createWriteStream(tempBinaryPath);
+    if (!res?.body) throw new Error("Response body is empty.");
+    res.body.pipe(tempFileStream);
+
+    await new Promise((resolve, reject) => {
+      tempFileStream.on("finish", resolve);
+      tempFileStream.on("error", reject);
+    });
+
+    const newHash = await hashFile(tempBinaryPath);
+    if (newHash !== currentHash) {
+      console.log("An update is available.");
+    } else {
+      console.log("No update is available. The current binary is up to date.");
+    }
   } catch (error) {
-    console.error(`Update process failed: ${error}`);
-  } finally {
-    // Cleanup
-    if (existsSync(tempDownloadPath)) {
-      unlinkSync(tempDownloadPath);
-    }
-    if (existsSync(tempScriptPath)) {
-      unlinkSync(tempScriptPath);
-    }
+    console.error(`Error during update check: ${error}`);
   }
 }
 
-updateWieldBinary();
+checkForUpdate();

@@ -4,6 +4,7 @@ import "dotenv/config";
 import Fastify, { FastifyReply, FastifyRequest } from "fastify";
 import cors from "@fastify/cors";
 import checkHealth from "../monitoring/health-check.js";
+import checkForUpdate from "../updates/fetch-and-update-if-needed.js";
 
 const fastify = Fastify({
   logger: true,
@@ -28,6 +29,28 @@ fastify.get(
       return reply.code(500).send({
         status: "error",
         message: "Failed to perform node health check",
+        error: (error as { message: string })?.message,
+      });
+    }
+  }
+);
+
+fastify.get(
+  "/update-check",
+  async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const updateStatus = await checkForUpdate();
+      return reply.code(200).send({
+        status: "success",
+        isNewUpdateAvailable: updateStatus.isNewUpdateAvailable,
+        message: updateStatus.isNewUpdateAvailable
+          ? "An update is available."
+          : "Your system is up to date.",
+      });
+    } catch (error) {
+      return reply.code(500).send({
+        status: "error",
+        message: "Failed to check for updates",
         error: (error as { message: string })?.message,
       });
     }

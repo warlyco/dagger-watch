@@ -9,6 +9,10 @@ import { createHash } from "crypto";
 import { tmpdir } from "os";
 import { join } from "path";
 
+interface UpdateStatus {
+  isNewUpdateAvailable: boolean;
+}
+
 const scriptUrl =
   "https://shdw-drive.genesysgo.net/4xdLyZZJzL883AbiZvgyWKf2q55gcZiMgMkDNQMnyFJC/wield-installer.sh";
 const localBinaryPath = "/home/dagger/wield";
@@ -36,7 +40,11 @@ async function hashFile(filePath: string): Promise<string> {
   });
 }
 
-async function checkForUpdate(): Promise<void> {
+async function checkForUpdate(): Promise<UpdateStatus> {
+  let updateStatus = {
+    isNewUpdateAvailable: false,
+    hadError: false,
+  };
   try {
     const binaryUrl = await fetchScriptAndExtractBinaryUrl();
     const currentHash = existsSync(localBinaryPath)
@@ -46,8 +54,10 @@ async function checkForUpdate(): Promise<void> {
     // Download the latest binary to a temporary location for hashing
     const tempBinaryPath = join(tmpdir(), "wield-latest-temp");
     const res = await fetch(binaryUrl);
-    if (!res.ok)
+    if (!res.ok) {
+      updateStatus.hadError = true;
       throw new Error(`Failed to download binary: ${res.statusText}`);
+    }
     const tempFileStream = createWriteStream(tempBinaryPath);
     if (!res?.body) throw new Error("Response body is empty.");
     res.body.pipe(tempFileStream);
@@ -60,12 +70,17 @@ async function checkForUpdate(): Promise<void> {
     const newHash = await hashFile(tempBinaryPath);
     if (newHash !== currentHash) {
       console.log("An update is available.");
+      updateStatus.isNewUpdateAvailable = true;
     } else {
       console.log("No update is available. The current binary is up to date.");
+      updateStatus.isNewUpdateAvailable = false;
     }
+    return updateStatus;
   } catch (error) {
     console.error(`Error during update check: ${error}`);
+    updateStatus.hadError = true;
+    return updateStatus;
   }
 }
 
-checkForUpdate();
+export default checkForUpdate;

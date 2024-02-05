@@ -22,8 +22,7 @@ fastify.get(
       const healthStatus = await checkHealth();
       return reply.code(200).send({
         status: "success",
-        data: healthStatus,
-        isActive: healthStatus.isActive,
+        ...healthStatus,
       });
     } catch (error) {
       return reply.code(500).send({

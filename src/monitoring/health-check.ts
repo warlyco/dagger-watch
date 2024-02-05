@@ -6,7 +6,6 @@ import { promisify } from "util";
 interface ServerStatus {
   isActive: boolean;
   isFinalizing: boolean;
-  statusCheckHasError: boolean;
 }
 
 const execAsync = promisify(exec);
@@ -18,7 +17,6 @@ async function checkLogsForFinalization(): Promise<ServerStatus> {
   let serverStatus = {
     isActive: false, // This will be updated by checkServiceStatus
     isFinalizing: false,
-    statusCheckHasError: false,
   };
 
   try {
@@ -27,7 +25,6 @@ async function checkLogsForFinalization(): Promise<ServerStatus> {
     );
     if (stderr) {
       console.error(`Error checking logs: ${stderr}`);
-      serverStatus.statusCheckHasError = true;
       serverStatus.isFinalizing = false;
     } else if (stdout) {
       console.log("Logs show finalization. Node appears healthy.");
@@ -38,7 +35,6 @@ async function checkLogsForFinalization(): Promise<ServerStatus> {
     }
   } catch (error) {
     console.log("No recent finalization in logs. Node may not be healthy.");
-    serverStatus.statusCheckHasError = true;
     serverStatus.isFinalizing = false;
   }
 
@@ -55,7 +51,6 @@ async function checkServiceStatus(): Promise<ServerStatus> {
     );
     if (stderr) {
       console.error(`Error checking service status: ${stderr}`);
-      serverStatus.statusCheckHasError = true;
       serverStatus.isActive = false;
     } else if (stdout.trim() === "active") {
       console.log("Service is active.");
@@ -66,7 +61,6 @@ async function checkServiceStatus(): Promise<ServerStatus> {
     }
   } catch (error) {
     console.error(`Error checking service status: ${error}`);
-    serverStatus.statusCheckHasError = true;
     serverStatus.isActive = false;
   }
 
